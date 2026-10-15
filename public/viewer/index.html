@@ -1,0 +1,3090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Knowledge Galaxy — 3D Markdown Graph</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- 3D Force Graph & Three.js CDN -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/3d-force-graph@1.73.4/dist/3d-force-graph.min.js"></script>
+
+  <!-- Graph Data -->
+  <script src="graph-data.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #030712;
+      color: #f3f4f6;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      user-select: none;
+    }
+
+    #3d-graph {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+
+    /* Ambient Cosmic Vignette */
+    .cosmic-vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+      background: radial-gradient(circle at 50% 50%, transparent 35%, rgba(2, 6, 23, 0.8) 100%);
+    }
+
+    /* Top HUD Header */
+    .hud-header {
+      position: fixed;
+      top: 16px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .brand-glass {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px 8px 12px;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 9999px;
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.8), 0 0 20px rgba(56, 189, 248, 0.12);
+    }
+
+    .brand-orb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #38bdf8 0%, #3b82f6 60%, transparent 100%);
+      box-shadow: 0 0 12px #38bdf8;
+      animation: pulse-glow 3s infinite ease-in-out;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { transform: scale(1); opacity: 0.9; }
+      50% { transform: scale(1.25); opacity: 1; box-shadow: 0 0 20px #38bdf8; }
+    }
+
+    .brand-title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, #ffffff 30%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-stats {
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      color: #64748b;
+      padding-left: 8px;
+      border-left: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    /* Controls HUD */
+    .hud-controls {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hud-input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .hud-search-input {
+      width: 220px;
+      padding: 8px 14px 8px 34px;
+      font-size: 13px;
+      color: #f1f5f9;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 9999px;
+      outline: none;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+
+    .hud-search-input:focus {
+      width: 280px;
+      border-color: #38bdf8;
+      background: rgba(15, 23, 42, 0.9);
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.25);
+    }
+
+    .hud-search-icon {
+      position: absolute;
+      left: 12px;
+      width: 14px;
+      height: 14px;
+      color: #94a3b8;
+      pointer-events: none;
+    }
+
+    .hud-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #cbd5e1;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 9999px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    .hud-btn:hover {
+      color: #ffffff;
+      background: rgba(30, 41, 59, 0.85);
+      border-color: rgba(255, 255, 255, 0.25);
+      transform: translateY(-1px);
+    }
+
+    .hud-btn.active {
+      color: #38bdf8;
+      border-color: rgba(56, 189, 248, 0.4);
+      background: rgba(56, 189, 248, 0.15);
+    }
+
+    /* Group Filter Bar */
+    .group-bar {
+      position: fixed;
+      top: 68px;
+      left: 20px;
+      z-index: 10;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      max-width: 80%;
+      pointer-events: auto;
+    }
+
+    .group-tag {
+      padding: 5px 11px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 9999px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .group-tag .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+
+    .group-tag:hover {
+      color: #f1f5f9;
+      background: rgba(30, 41, 59, 0.8);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .group-tag.selected {
+      background: rgba(255, 255, 255, 0.14);
+      color: #ffffff;
+      border-color: currentColor;
+      box-shadow: 0 0 14px currentColor;
+    }
+
+    /* Bottom Left Legend */
+    .hud-legend {
+      position: fixed;
+      bottom: 24px;
+      left: 20px;
+      z-index: 10;
+      padding: 12px 16px;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      font-size: 11px;
+      pointer-events: auto;
+      max-width: 280px;
+    }
+
+    .legend-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #64748b;
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+
+    .legend-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 12px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #cbd5e1;
+      cursor: pointer;
+    }
+
+    .legend-item:hover {
+      color: #ffffff;
+    }
+
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* Side Panel Note Inspector */
+    .side-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 440px;
+      max-width: 90vw;
+      height: 100vh;
+      background: rgba(10, 15, 29, 0.86);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border-left: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: -10px 0 40px rgba(0, 0, 0, 0.7);
+      z-index: 30;
+      transform: translateX(100%);
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      pointer-events: auto;
+    }
+
+    .side-panel.open {
+      transform: translateX(0);
+    }
+
+    .panel-header {
+      padding: 24px 24px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      position: relative;
+    }
+
+    .panel-close-btn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      transition: all 0.2s ease;
+    }
+
+    .panel-close-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #ffffff;
+      transform: scale(1.05);
+    }
+
+    .panel-meta-tags {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .badge-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+
+    .badge-group {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: capitalize;
+      padding: 2px 9px;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .panel-title {
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.3;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+
+    .panel-path {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #64748b;
+      word-break: break-all;
+    }
+
+    .panel-body {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    }
+
+    .panel-body::-webkit-scrollbar {
+      width: 5px;
+    }
+    .panel-body::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #94a3b8;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .excerpt-box {
+      font-size: 13.5px;
+      line-height: 1.7;
+      color: #e2e8f0;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 16px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: inherit;
+      margin-bottom: 24px;
+    }
+
+    .neighbors-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .neighbor-pill {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      color: #cbd5e1;
+      text-decoration: none;
+    }
+
+    .neighbor-pill:hover {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: rgba(56, 189, 248, 0.3);
+      color: #ffffff;
+      transform: translateX(4px);
+    }
+
+    .neighbor-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      font-weight: 500;
+    }
+
+    .neighbor-badge {
+      font-size: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      color: #94a3b8;
+    }
+
+    .scene-tooltip {
+      color: #ffffff !important;
+      background: rgba(15, 23, 42, 0.9) !important;
+      border: 1px solid rgba(56, 189, 248, 0.3) !important;
+      border-radius: 8px !important;
+      padding: 6px 12px !important;
+      font-size: 12px !important;
+      font-family: 'Plus Jakarta Sans', sans-serif !important;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5) !important;
+      pointer-events: none;
+    }
+
+    /* ==============================================================
+       SLEEK BOTTOM AI GALAXY BRAIN & VOICE INTERFACE
+       ============================================================== */
+    .ai-brain-container {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 680px;
+      max-width: calc(100vw - 360px);
+      z-index: 25;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    @media (max-width: 1024px) {
+      .ai-brain-container {
+        max-width: calc(100vw - 48px);
+      }
+    }
+
+    /* Status Line Pill */
+    .ai-status-line {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      font-size: 11.5px;
+      font-family: 'JetBrains Mono', monospace;
+      padding: 4px 14px;
+      border-radius: 9999px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      width: fit-content;
+      align-self: center;
+      transition: all 0.25s ease;
+      pointer-events: auto;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    }
+
+    .ai-status-line.visible {
+      display: inline-flex;
+    }
+
+    .ai-status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+
+    .ai-status-line.listening {
+      color: #fb7185;
+      border-color: rgba(244, 63, 94, 0.45);
+      background: rgba(244, 63, 94, 0.15);
+    }
+    .ai-status-line.listening .ai-status-dot {
+      background: #f43f5e;
+      box-shadow: 0 0 10px #f43f5e;
+      animation: pulse-dot 0.9s infinite ease-in-out;
+    }
+
+    .ai-status-line.thinking {
+      color: #fde047;
+      border-color: rgba(234, 179, 8, 0.45);
+      background: rgba(234, 179, 8, 0.15);
+    }
+    .ai-status-line.thinking .ai-status-dot {
+      background: #eab308;
+      box-shadow: 0 0 10px #eab308;
+      animation: pulse-dot 0.9s infinite ease-in-out;
+    }
+
+    .ai-status-line.speaking {
+      color: #6ee7b7;
+      border-color: rgba(52, 211, 153, 0.45);
+      background: rgba(52, 211, 153, 0.15);
+    }
+    .ai-status-line.speaking .ai-status-dot {
+      background: #10b981;
+      box-shadow: 0 0 10px #10b981;
+      animation: pulse-dot 1.2s infinite ease-in-out;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { transform: scale(1); opacity: 0.8; }
+      50% { transform: scale(1.4); opacity: 1; }
+    }
+
+    .ai-input-bar {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 9999px;
+      padding: 6px 8px 6px 16px;
+      box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.7), 0 0 25px rgba(56, 189, 248, 0.15);
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .ai-input-bar:focus-within {
+      border-color: #38bdf8;
+      box-shadow: 0 15px 40px -5px rgba(0, 0, 0, 0.8), 0 0 35px rgba(56, 189, 248, 0.3);
+      background: rgba(15, 23, 42, 0.95);
+      transform: translateY(-2px);
+    }
+
+    .ai-sparkle-icon {
+      width: 18px;
+      height: 18px;
+      color: #38bdf8;
+      flex-shrink: 0;
+      margin-right: 10px;
+      filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.6));
+    }
+
+    .ai-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #f8fafc;
+      font-size: 13.5px;
+      font-family: inherit;
+    }
+
+    .ai-input::placeholder {
+      color: #64748b;
+    }
+
+    /* Microphone Button */
+    .ai-mic-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #cbd5e1;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+      margin-right: 6px;
+      font-size: 15px;
+    }
+
+    .ai-mic-btn:hover {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: #38bdf8;
+      color: #ffffff;
+      transform: scale(1.05);
+    }
+
+    .ai-mic-btn.recording {
+      background: rgba(244, 63, 94, 0.25);
+      border-color: #f43f5e;
+      color: #f43f5e;
+      box-shadow: 0 0 15px rgba(244, 63, 94, 0.6);
+      animation: mic-pulse 1.2s infinite ease-in-out;
+    }
+
+    @keyframes mic-pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.12); }
+    }
+
+    .ai-send-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+      box-shadow: 0 0 12px rgba(2, 132, 199, 0.4);
+    }
+
+    .ai-send-btn:hover {
+      transform: scale(1.08);
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.6);
+    }
+
+    .ai-send-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* Floating Answer Card */
+    .ai-answer-card {
+      pointer-events: auto;
+      background: rgba(13, 20, 36, 0.94);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 16px;
+      padding: 18px 22px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(56, 189, 248, 0.15);
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      animation: fadeInSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .ai-answer-card.visible {
+      display: flex;
+    }
+
+    @keyframes fadeInSlideUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .ai-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 10px;
+    }
+
+    .ai-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .ai-card-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #38bdf8;
+    }
+
+    .ai-card-badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #38bdf8;
+      box-shadow: 0 0 8px #38bdf8;
+    }
+
+    .ai-speech-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: #34d399;
+      background: rgba(52, 211, 153, 0.12);
+      border: 1px solid rgba(52, 211, 153, 0.3);
+      padding: 2px 8px;
+      border-radius: 9999px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .ai-speech-btn:hover {
+      background: rgba(52, 211, 153, 0.25);
+    }
+
+    .ai-card-close {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+
+    .ai-card-close:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #ffffff;
+    }
+
+    .ai-query-echo {
+      font-size: 12px;
+      color: #94a3b8;
+      font-style: italic;
+    }
+
+    .ai-answer-text {
+      font-size: 14px;
+      line-height: 1.65;
+      color: #f1f5f9;
+      font-weight: 400;
+    }
+
+    .ai-sources-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .ai-sources-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .ai-sources-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .ai-source-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 9999px;
+      font-size: 11.5px;
+      color: #cbd5e1;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .ai-source-pill:hover {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: #38bdf8;
+      color: #ffffff;
+      transform: translateY(-1px);
+    }
+
+    .ai-source-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    /* Help & Troubleshooting Modal */
+    .help-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.75);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      z-index: 60;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .help-modal-overlay.open {
+      display: flex;
+    }
+    .help-modal-card {
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      width: 580px;
+      max-width: 100%;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85), 0 0 30px rgba(56, 189, 248, 0.15);
+      overflow: hidden;
+    }
+    .help-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .help-modal-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .help-modal-body {
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+    .help-row {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 10px 14px;
+    }
+    .help-symptom {
+      font-size: 12px;
+      font-weight: 600;
+      color: #fb7185;
+      margin-bottom: 3px;
+    }
+    .help-fix {
+      font-size: 11.5px;
+      color: #cbd5e1;
+      line-height: 1.5;
+    }
+    .help-fix kbd {
+      background: #000;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: #38bdf8;
+    }
+    /* Jarvis Phone Call Simulator Styles */
+    .phone-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.8);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 65;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .phone-modal-overlay.open {
+      display: flex;
+    }
+    .phone-modal-card {
+      background: rgba(15, 23, 42, 0.96);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 18px;
+      width: 760px;
+      max-width: 100%;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9), 0 0 35px rgba(56, 189, 248, 0.15);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      max-height: 90vh;
+    }
+    .phone-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(10, 15, 29, 0.6);
+    }
+    .phone-modal-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .phone-modal-body {
+      padding: 18px 22px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .phone-details-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 12px 14px;
+      border-radius: 12px;
+    }
+    .phone-field-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+    .phone-field-input {
+      width: 100%;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: #f8fafc;
+      outline: none;
+      font-family: inherit;
+    }
+    .phone-field-input:focus {
+      border-color: #38bdf8;
+    }
+    .phone-call-console {
+      background: rgba(2, 6, 23, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .phone-status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .phone-status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .phone-pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #94a3b8;
+    }
+    .phone-pulse-dot.calling {
+      background: #f59e0b;
+      box-shadow: 0 0 10px #f59e0b;
+      animation: mic-pulse 1s infinite ease-in-out;
+    }
+    .phone-pulse-dot.active {
+      background: #10b981;
+      box-shadow: 0 0 10px #10b981;
+      animation: mic-pulse 2s infinite ease-in-out;
+    }
+    .phone-transcript {
+      height: 220px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 8px;
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+    .phone-bubble {
+      padding: 8px 12px;
+      border-radius: 8px;
+      max-width: 88%;
+      word-break: break-word;
+    }
+    .phone-bubble.jarvis {
+      align-self: flex-start;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      color: #e0f2fe;
+    }
+    .phone-bubble.receptionist {
+      align-self: flex-end;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #f1f5f9;
+    }
+    .phone-bubble.system {
+      align-self: center;
+      background: rgba(244, 63, 94, 0.12);
+      border: 1px solid rgba(244, 63, 94, 0.25);
+      color: #fda4af;
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .phone-tool-tag {
+      display: inline-block;
+      padding: 2px 6px;
+      background: #0284c7;
+      color: white;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      margin-top: 4px;
+    }
+    .phone-scenario-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .phone-scenario-btn {
+      padding: 6px 12px;
+      font-size: 11px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      color: #cbd5e1;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .phone-scenario-btn:hover {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: #38bdf8;
+      color: #ffffff;
+    }
+    .phone-scenario-btn.selected {
+      background: rgba(56, 189, 248, 0.25);
+      border-color: #38bdf8;
+      color: #38bdf8;
+      font-weight: 600;
+    }
+    .phone-controls-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+  </style>
+</head>
+<body>
+  <!-- 3D WebGL Canvas Container -->
+  <div id="3d-graph"></div>
+  <div class="cosmic-vignette"></div>
+
+  <!-- Top Navigation & Controls HUD -->
+  <header class="hud-header">
+    <div class="brand-glass">
+      <div class="brand-orb"></div>
+      <span class="brand-title">Knowledge Galaxy</span>
+      <span class="brand-stats" id="galaxy-stats">25 Nodes • 225 Links</span>
+    </div>
+
+    <div class="hud-controls">
+      <div class="hud-input-wrapper">
+        <svg class="hud-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+        <input 
+          type="text" 
+          id="search-input" 
+          class="hud-search-input" 
+          placeholder="Filter notes by title..." 
+          autocomplete="off"
+        />
+      </div>
+
+      <button id="drift-btn" class="hud-btn active" title="Toggle slow cosmic idle rotation">
+        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        <span id="drift-btn-text">Drift ON</span>
+      </button>
+
+      <button id="reset-view-btn" class="hud-btn" title="Reset Camera to panoramic view">
+        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+        </svg>
+        Reset
+      </button>
+
+      <button id="phone-btn" class="hud-btn" title="Jarvis Phone Booking Dispatcher">
+        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+        </svg>
+        <span>Jarvis Call</span>
+      </button>
+
+      <button id="help-btn" class="hud-btn" title="Troubleshooting Guide">
+        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" stroke-width="2"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3m.08 3.5h.01"/>
+        </svg>
+        Help
+      </button>
+    </div>
+  </header>
+
+  <!-- Troubleshooting & Help Modal -->
+  <div class="help-modal-overlay" id="help-modal">
+    <div class="help-modal-card">
+      <div class="help-modal-header">
+        <div class="help-modal-title">
+          <span style="color:#f43f5e">🔧</span> Troubleshooting (90% of all issues)
+        </div>
+        <button class="panel-close-btn" id="help-close" style="position:static; width:28px; height:28px;">✕</button>
+      </div>
+      <div class="help-modal-body">
+        <div class="help-row">
+          <div class="help-symptom">Mic button does nothing</div>
+          <div class="help-fix">Chrome → lock icon in address bar → allow Microphone. Must be Chrome/Edge.</div>
+        </div>
+        <div class="help-row">
+          <div class="help-symptom">No sound</div>
+          <div class="help-fix">Click anywhere on the page once, then ask again (browsers block audio before first interaction).</div>
+        </div>
+        <div class="help-row">
+          <div class="help-symptom">Page looks stale after a change</div>
+          <div class="help-fix">Hard reload: <kbd>Cmd+Shift+R</kbd> (Mac) / <kbd>Ctrl+Shift+R</kbd> (Windows).</div>
+        </div>
+        <div class="help-row">
+          <div class="help-symptom">"model not configured"</div>
+          <div class="help-fix">You didn't paste your key into <code>config.json</code>, or left the placeholder text in.</div>
+        </div>
+        <div class="help-row">
+          <div class="help-symptom">Answers are generic</div>
+          <div class="help-fix">Your notes folder path was wrong in Prompt 1 — re-run it with the full absolute path.</div>
+        </div>
+        <div class="help-row">
+          <div class="help-symptom">Anything else</div>
+          <div class="help-fix">Paste the exact error into Claude Code and say "fix it." That's the whole method.</div>
+        </div>
+      </div>
+  </div>
+
+  <!-- Jarvis Phone Call Simulator Modal -->
+  <div class="phone-modal-overlay" id="phone-modal">
+    <div class="phone-modal-card">
+      <div class="phone-modal-header">
+        <div class="phone-modal-title">
+          <span style="font-size:16px;">📞</span>
+          <span>Jarvis Autonomous Booking Dispatcher</span>
+          <span style="font-size:10px; font-weight:500; padding:2px 8px; border-radius:9999px; background:rgba(56,189,248,0.15); color:#38bdf8; border:1px solid rgba(56,189,248,0.3);">Voice Phone Agent</span>
+        </div>
+        <button class="panel-close-btn" id="phone-close" style="position:static; width:28px; height:28px;">✕</button>
+      </div>
+
+      <div class="phone-modal-body">
+        <!-- Booking Parameters -->
+        <div class="phone-details-grid">
+          <div>
+            <div class="phone-field-label">Boss's Name [YOUR NAME]</div>
+            <input type="text" id="phone-param-name" class="phone-field-input" value="Mikey" placeholder="e.g. Mikey" />
+          </div>
+          <div>
+            <div class="phone-field-label">Service / Party {{party_or_service}}</div>
+            <input type="text" id="phone-param-service" class="phone-field-input" value="Table for two at Osteria Stella" placeholder="e.g. Table for two" />
+          </div>
+          <div>
+            <div class="phone-field-label">Requested Time {{datetime}}</div>
+            <input type="text" id="phone-param-time" class="phone-field-input" value="tonight at 7" placeholder="e.g. tonight at 7" />
+          </div>
+          <div>
+            <div class="phone-field-label">Contact Number {{from_number}}</div>
+            <input type="text" id="phone-param-phone" class="phone-field-input" value="555-0199" placeholder="e.g. 555-0199" />
+          </div>
+          <div style="grid-column: 1 / -1;">
+            <div class="phone-field-label">Notes {{notes}} (or 'none')</div>
+            <input type="text" id="phone-param-notes" class="phone-field-input" value="quiet booth preferred, celebrating an anniversary" placeholder="e.g. quiet booth" />
+          </div>
+        </div>
+
+        <!-- Scenarios to Test Guardrails -->
+        <div>
+          <div class="phone-field-label" style="margin-bottom:6px;">Select Call Scenario to Execute:</div>
+          <div class="phone-scenario-grid">
+            <button class="phone-scenario-btn selected" data-scenario="available">1. Time Available (Smooth Booking)</button>
+            <button class="phone-scenario-btn" data-scenario="alternative">2. Time Unavailable (Offers 8pm Alternative)</button>
+            <button class="phone-scenario-btn" data-scenario="nothing">3. Time Unavailable (Offers Nothing)</button>
+            <button class="phone-scenario-btn" data-scenario="menu">4. Phone Menu IVR & Deposit Handling</button>
+            <button class="phone-scenario-btn" data-scenario="interactive">5. Custom Interactive Voice (You speak as Host)</button>
+          </div>
+        </div>
+
+        <!-- Live Call Console & Transcript -->
+        <div class="phone-call-console">
+          <div class="phone-status-bar">
+            <div class="phone-status-indicator">
+              <div class="phone-pulse-dot" id="phone-pulse-dot"></div>
+              <span id="phone-status-label" style="color:#94a3b8">Call Status: Standby</span>
+            </div>
+            <div style="font-size:11px; font-family:'JetBrains Mono', monospace; color:#64748b;" id="phone-timer">00:00</div>
+          </div>
+
+          <!-- Transcript Container -->
+          <div class="phone-transcript" id="phone-transcript">
+            <div class="phone-bubble system">Jarvis phone system initialized. Ready to initiate call on behalf of boss.</div>
+          </div>
+
+          <!-- Interactive controls for Scenario 5 (Live Reply) -->
+          <div id="phone-interactive-bar" style="display:none; gap:6px; align-items:center;">
+            <input type="text" id="phone-host-input" class="phone-field-input" placeholder="Type or speak what the receptionist says..." />
+            <button id="phone-host-mic" class="ai-mic-btn" style="width:32px; height:32px; margin:0;" title="Speak receptionist response">🎙</button>
+            <button id="phone-host-send" class="hud-btn" style="padding:6px 12px;">Reply</button>
+          </div>
+        </div>
+
+        <div class="phone-controls-row">
+          <button id="phone-save-memory-btn" class="hud-btn" style="display:none;" title="Save booking to Knowledge Galaxy">
+            ⭐ Record Booking in Galaxy Note
+          </button>
+          <button id="phone-start-btn" class="hud-btn active" style="padding:8px 18px; font-weight:600; background:linear-gradient(135deg, #0284c7 0%, #2563eb 100%); color:#fff; border:none; box-shadow:0 0 14px rgba(2,132,199,0.5);">
+            📞 Place Call as Jarvis
+          </button>
+          <button id="phone-hangup-btn" class="hud-btn" style="display:none; color:#f43f5e; border-color:rgba(244,63,94,0.3); background:rgba(244,63,94,0.15);">
+            Hang Up
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Group Filter Bar -->
+  <div class="group-bar" id="group-filters"></div>
+
+  <!-- Bottom Left Legend -->
+  <div class="hud-legend" id="hud-legend">
+    <div class="legend-title">Constellation Groups</div>
+    <div class="legend-grid" id="legend-grid"></div>
+  </div>
+
+  <!-- Side Panel Note Inspector -->
+  <aside class="side-panel" id="side-panel">
+    <div class="panel-header">
+      <button class="panel-close-btn" id="panel-close" title="Close panel (Esc)">✕</button>
+      <div class="panel-meta-tags">
+        <span class="badge-id" id="panel-id">#0</span>
+        <span class="badge-group" id="panel-group">operations</span>
+      </div>
+      <h2 class="panel-title" id="panel-title">Espresso Calibration & Extraction</h2>
+      <div class="panel-path" id="panel-path">notes/operations/Espresso Calibration & Extraction.md</div>
+    </div>
+
+    <div class="panel-body">
+      <div class="section-label">
+        <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+        </svg>
+        Note Excerpt (~700 chars)
+      </div>
+      <div class="excerpt-box" id="panel-excerpt"></div>
+
+      <div class="section-label">
+        <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+        </svg>
+        Connected Neighbors (<span id="panel-neighbor-count">0</span>)
+      </div>
+      <div class="neighbors-grid" id="panel-neighbors"></div>
+    </div>
+  </aside>
+
+  <!-- ==============================================================
+       AI GALAXY BRAIN CHAT & VOICE INTERFACE
+       ============================================================== -->
+  <div class="ai-brain-container">
+    <!-- Status Line (Listening, Thinking, Speaking) -->
+    <div class="ai-status-line" id="ai-status-line">
+      <div class="ai-status-dot"></div>
+      <span id="ai-status-text">● ready</span>
+    </div>
+
+    <!-- Floating Answer Card -->
+    <div class="ai-answer-card" id="ai-answer-card">
+      <div class="ai-card-header">
+        <div class="ai-header-left">
+          <div class="ai-card-badge">
+            <div class="ai-card-badge-dot"></div>
+            <span>Galaxy Intelligence</span>
+          </div>
+          <button class="ai-speech-btn" id="ai-speech-toggle" title="Replay / stop spoken audio">
+            <span id="ai-speech-icon">🔊</span>
+            <span id="ai-speech-status">Speak</span>
+          </button>
+        </div>
+        <button class="ai-card-close" id="ai-card-close" title="Dismiss answer">✕</button>
+      </div>
+
+      <div class="ai-query-echo" id="ai-query-echo"></div>
+
+      <!-- Result Answer Text -->
+      <div class="ai-answer-text" id="ai-answer-text"></div>
+
+      <!-- Sources Used -->
+      <div class="ai-sources-section" id="ai-sources-section">
+        <span class="ai-sources-label">Sources Used (Click to focus):</span>
+        <div class="ai-sources-pills" id="ai-sources-pills"></div>
+      </div>
+    </div>
+
+    <!-- Sleek Bottom Input Bar with Mic & Send -->
+    <form class="ai-input-bar" id="ai-form" onsubmit="return false;">
+      <svg class="ai-sparkle-icon" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2L14.2 8.3L20.5 10.5L14.2 12.7L12 19L9.8 12.7L3.5 10.5L9.8 8.3L12 2Z" />
+      </svg>
+      <input 
+        type="text" 
+        id="ai-input" 
+        class="ai-input" 
+        placeholder="Type or click 🎙 to ask your notes (e.g. 'What is our espresso ratio?')..." 
+        autocomplete="off"
+      />
+      <!-- 🎙 Speech Recognition Mic Button -->
+      <button type="button" id="ai-mic-btn" class="ai-mic-btn" title="Speak question with microphone (Chrome)">
+        🎙
+      </button>
+      <!-- Submit Button -->
+      <button type="submit" id="ai-submit-btn" class="ai-send-btn" title="Ask question">
+        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+        </svg>
+      </button>
+    </form>
+  </div>
+
+  <script>
+    // Vibrant Cosmic Palette for note groups
+    const GROUP_COLORS = {
+      'operations': '#06b6d4',  // Cyan
+      'recipes':    '#f59e0b',  // Amber gold
+      'equipment':  '#818cf8',  // Indigo purple
+      'marketing':  '#f43f5e',  // Coral rose
+      'people':     '#10b981',  // Emerald green
+      'finance':    '#3b82f6',  // Sapphire blue
+      'captures':   '#ec4899',  // Luminous Fuchsia / Pink for live voice memories
+      'general':    '#a855f7'   // Violet fallback
+    };
+
+    function getGroupColor(group) {
+      if (!group) return '#a855f7';
+      const key = group.toLowerCase().trim();
+      return GROUP_COLORS[key] || '#38bdf8';
+    }
+
+    const rawData = typeof GRAPH !== 'undefined' ? GRAPH : { nodes: [], links: [] };
+
+    // Update HUD Stats
+    document.getElementById('galaxy-stats').textContent = 
+      `${rawData.nodes.length} Nodes • ${rawData.links.length} Links`;
+
+    // Map neighbor lookups
+    const neighborsById = new Map();
+    const linksByPair = new Set();
+
+    rawData.nodes.forEach(node => {
+      neighborsById.set(node.id, new Set());
+    });
+
+    rawData.links.forEach(link => {
+      const s = typeof link.source === 'object' ? link.source.id : link.source;
+      const t = typeof link.target === 'object' ? link.target.id : link.target;
+      if (neighborsById.has(s) && neighborsById.has(t)) {
+        neighborsById.get(s).add(t);
+        neighborsById.get(t).add(s);
+        linksByPair.add(`${s}-${t}`);
+        linksByPair.add(`${t}-${s}`);
+      }
+    });
+
+    // Populate Filter Bar & Legend
+    const distinctGroups = [...new Set(rawData.nodes.map(n => n.group))].sort();
+    const filterContainer = document.getElementById('group-filters');
+    const legendGrid = document.getElementById('legend-grid');
+
+    function ensureGroupRegistered(grp) {
+      if (!distinctGroups.includes(grp)) {
+        distinctGroups.push(grp);
+        const color = getGroupColor(grp);
+        const count = rawData.nodes.filter(n => n.group === grp).length;
+
+        const pill = document.createElement('div');
+        pill.className = 'group-tag';
+        pill.id = `pill-${grp}`;
+        pill.innerHTML = `<span class="dot" style="background: ${color}"></span> ${grp} (${count})`;
+        pill.onclick = () => filterByGroup(grp);
+        filterContainer.appendChild(pill);
+
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        item.innerHTML = `<div class="legend-dot" style="background: ${color}; box-shadow: 0 0 6px ${color}"></div> <span>${grp}</span>`;
+        item.onclick = () => filterByGroup(grp);
+        legendGrid.appendChild(item);
+      }
+    }
+
+    let activeGroupFilter = null;
+
+    const allPill = document.createElement('div');
+    allPill.className = 'group-tag selected';
+    allPill.innerHTML = `<span class="dot" style="background: #38bdf8"></span> All Groups`;
+    allPill.onclick = () => filterByGroup(null);
+    filterContainer.appendChild(allPill);
+
+    distinctGroups.forEach(grp => {
+      const color = getGroupColor(grp);
+      const count = rawData.nodes.filter(n => n.group === grp).length;
+
+      const pill = document.createElement('div');
+      pill.className = 'group-tag';
+      pill.id = `pill-${grp}`;
+      pill.innerHTML = `<span class="dot" style="background: ${color}"></span> ${grp} (${count})`;
+      pill.onclick = () => filterByGroup(grp);
+      filterContainer.appendChild(pill);
+
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      item.innerHTML = `<div class="legend-dot" style="background: ${color}; box-shadow: 0 0 6px ${color}"></div> <span>${grp}</span>`;
+      item.onclick = () => filterByGroup(grp);
+      legendGrid.appendChild(item);
+    });
+
+    // Selected state tracking
+    let selectedNode = null;
+    let bornPulseNodeId = null;
+    const highlightNodes = new Set();
+    const highlightLinks = new Set();
+    const aiAnswerNodes = new Set();
+
+    // Idle Drift state
+    let isDrifting = true;
+    let cameraAngle = 0;
+    const driftSpeed = 0.0012;
+    const cameraDistance = 380;
+    let lastUserActionTime = Date.now();
+
+    // Initialize 3D Force Graph
+    const elem = document.getElementById('3d-graph');
+    const Graph = ForceGraph3D()(elem)
+      .graphData(rawData)
+      .backgroundColor('#020617')
+      .showNavInfo(false)
+      .nodeId('id')
+      .nodeLabel(node => `
+        <div class="scene-tooltip">
+          <div style="font-weight:700; color: ${getGroupColor(node.group)}">${node.label}</div>
+          <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Group: ${node.group} • ID #${node.id}</div>
+        </div>
+      `)
+      .nodeVal(node => node.val || 10)
+      .nodeThreeObject(node => {
+        const colorHex = getGroupColor(node.group);
+        const isHighlighted = highlightNodes.size === 0 || highlightNodes.has(node.id);
+        const isDimmed = highlightNodes.size > 0 && !highlightNodes.has(node.id);
+        const isAiSource = aiAnswerNodes.has(node.id);
+        const isBornPulse = (bornPulseNodeId === node.id);
+
+        const group = new THREE.Group();
+
+        // Core Sphere
+        const radius = Math.max(2.5, Math.sqrt(node.val || 10) * 1.1) * (isBornPulse ? 1.6 : (isAiSource ? 1.4 : 1.0));
+        const sphereGeo = new THREE.SphereGeometry(radius, 24, 24);
+        const sphereMat = new THREE.MeshLambertMaterial({
+          color: new THREE.Color(isBornPulse ? '#f43f5e' : (isAiSource ? '#fef08a' : colorHex)),
+          emissive: new THREE.Color(isBornPulse ? '#ec4899' : (isAiSource ? '#f59e0b' : colorHex)),
+          emissiveIntensity: isBornPulse ? 1.8 : (isAiSource ? 1.0 : (isHighlighted ? 0.65 : 0.05)),
+          transparent: true,
+          opacity: isDimmed ? 0.15 : 0.95
+        });
+        const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+        group.add(sphere);
+
+        // Halo Aura Sprite
+        if (!isDimmed) {
+          const spriteMat = new THREE.SpriteMaterial({
+            map: createGlowTexture(isBornPulse ? '#ec4899' : (isAiSource ? '#f59e0b' : colorHex)),
+            color: new THREE.Color(isBornPulse ? '#f43f5e' : (isAiSource ? '#fef08a' : colorHex)),
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            opacity: isBornPulse ? 1.0 : (isAiSource ? 0.95 : (isHighlighted ? 0.75 : 0.3))
+          });
+          const sprite = new THREE.Sprite(spriteMat);
+          const haloScale = radius * (isBornPulse ? 8.5 : (isAiSource ? 5.5 : (isHighlighted ? 4.5 : 3.0)));
+          sprite.scale.set(haloScale, haloScale, 1.0);
+          group.add(sprite);
+        }
+
+        return group;
+      })
+      .linkWidth(link => {
+        const s = typeof link.source === 'object' ? link.source.id : link.source;
+        const t = typeof link.target === 'object' ? link.target.id : link.target;
+        return highlightLinks.has(`${s}-${t}`) || highlightLinks.has(`${t}-${s}`) ? 2.5 : 0.6;
+      })
+      .linkOpacity(0.3)
+      .linkColor(link => {
+        const s = typeof link.source === 'object' ? link.source.id : link.source;
+        const t = typeof link.target === 'object' ? link.target.id : link.target;
+        if (highlightLinks.size > 0) {
+          return (highlightLinks.has(`${s}-${t}`) || highlightLinks.has(`${t}-${s}`))
+            ? '#38bdf8' 
+            : 'rgba(255,255,255,0.02)';
+        }
+        return 'rgba(148, 163, 184, 0.22)';
+      })
+      .linkDirectionalParticles(link => {
+        const s = typeof link.source === 'object' ? link.source.id : link.source;
+        const t = typeof link.target === 'object' ? link.target.id : link.target;
+        return (highlightLinks.has(`${s}-${t}`) || highlightLinks.has(`${t}-${s}`)) ? 3 : 0;
+      })
+      .linkDirectionalParticleWidth(2.2)
+      .linkDirectionalParticleSpeed(0.006)
+      .linkDirectionalParticleColor(() => '#67e8f9')
+      .onNodeClick(node => {
+        handleNodeClick(node);
+      })
+      .onBackgroundClick(() => {
+        clearSelection();
+      })
+      .onNodeHover(node => {
+        elem.style.cursor = node ? 'pointer' : 'default';
+      });
+
+    function createGlowTexture(colorHex) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+      gradient.addColorStop(0.2, colorHex);
+      gradient.addColorStop(0.6, colorHex.replace(')', ', 0.3)').replace('rgb', 'rgba'));
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    // Build Cosmic Starfield in Scene
+    const scene = Graph.scene();
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0x38bdf8, 1.2);
+    dirLight.position.set(100, 200, 100);
+    scene.add(dirLight);
+
+    const starCount = 3000;
+    const starGeo = new THREE.BufferGeometry();
+    const starPos = new Float32Array(starCount * 3);
+    const starColors = new Float32Array(starCount * 3);
+
+    const palette = [
+      new THREE.Color('#ffffff'),
+      new THREE.Color('#38bdf8'),
+      new THREE.Color('#818cf8'),
+      new THREE.Color('#fcd34d'),
+      new THREE.Color('#f43f5e')
+    ];
+
+    for (let i = 0; i < starCount; i++) {
+      const radius = 600 + Math.random() * 900;
+      const theta = 2 * Math.PI * Math.random();
+      const phi = Math.acos(2 * Math.random() - 1);
+
+      starPos[i * 3]     = radius * Math.sin(phi) * Math.cos(theta);
+      starPos[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+      starPos[i * 3 + 2] = radius * Math.cos(phi);
+
+      const color = palette[Math.floor(Math.random() * palette.length)];
+      starColors[i * 3]     = color.r;
+      starColors[i * 3 + 1] = color.g;
+      starColors[i * 3 + 2] = color.b;
+    }
+
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+
+    const starMat = new THREE.PointsMaterial({
+      size: 2.2,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.85
+    });
+
+    const starField = new THREE.Points(starGeo, starMat);
+    scene.add(starField);
+
+    // Node Click Handler
+    function handleNodeClick(node) {
+      if (!node) return;
+      selectedNode = node;
+      lastUserActionTime = Date.now();
+      isDrifting = false;
+      updateDriftUI();
+
+      highlightNodes.clear();
+      highlightLinks.clear();
+
+      highlightNodes.add(node.id);
+      const neighbors = neighborsById.get(node.id) || new Set();
+      neighbors.forEach(nbrId => {
+        highlightNodes.add(nbrId);
+        highlightLinks.add(`${node.id}-${nbrId}`);
+        highlightLinks.add(`${nbrId}-${node.id}`);
+      });
+
+      const distance = 90;
+      Graph.cameraPosition(
+        { 
+          x: (node.x || 0) + 40, 
+          y: (node.y || 0) + 25, 
+          z: (node.z || 0) + distance 
+        }, 
+        node, 
+        1600
+      );
+
+      Graph.nodeRelSize(4);
+      openSidePanel(node, neighbors);
+    }
+
+    function clearSelection() {
+      selectedNode = null;
+      highlightNodes.clear();
+      highlightLinks.clear();
+      closeSidePanel();
+      Graph.nodeRelSize(4);
+    }
+
+    // Side Panel DOM logic
+    const panel = document.getElementById('side-panel');
+    const panelId = document.getElementById('panel-id');
+    const panelGroup = document.getElementById('panel-group');
+    const panelTitle = document.getElementById('panel-title');
+    const panelPath = document.getElementById('panel-path');
+    const panelExcerpt = document.getElementById('panel-excerpt');
+    const panelNeighbors = document.getElementById('panel-neighbors');
+    const panelNeighborCount = document.getElementById('panel-neighbor-count');
+    const panelClose = document.getElementById('panel-close');
+
+    panelClose.addEventListener('click', () => {
+      clearSelection();
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        clearSelection();
+        dismissAiCard();
+      }
+    });
+
+    function openSidePanel(node, neighborIds) {
+      panelId.textContent = `#${node.id}`;
+      panelGroup.textContent = node.group;
+      const grpColor = getGroupColor(node.group);
+      panelGroup.style.color = grpColor;
+      panelGroup.style.borderColor = grpColor;
+      panelGroup.style.backgroundColor = grpColor + '18';
+
+      panelTitle.textContent = node.label || node.name;
+      panelPath.textContent = node.path || `notes/${node.group}/${node.label}.md`;
+      panelExcerpt.textContent = node.excerpt || "No excerpt available for this note.";
+
+      panelNeighbors.innerHTML = '';
+      panelNeighborCount.textContent = neighborIds.size;
+
+      const neighborNodes = Array.from(neighborIds).map(id => rawData.nodes[id]).filter(Boolean);
+      neighborNodes.sort((a, b) => a.label.localeCompare(b.label));
+
+      neighborNodes.forEach(nbr => {
+        const nbrColor = getGroupColor(nbr.group);
+        const pill = document.createElement('div');
+        pill.className = 'neighbor-pill';
+        pill.innerHTML = `
+          <div class="neighbor-info">
+            <span style="width:8px; height:8px; border-radius:50%; background:${nbrColor}; display:inline-block; box-shadow:0 0 6px ${nbrColor}"></span>
+            <span>${nbr.label}</span>
+          </div>
+          <span class="neighbor-badge">#${nbr.id}</span>
+        `;
+        pill.onclick = (e) => {
+          e.stopPropagation();
+          handleNodeClick(nbr);
+        };
+        panelNeighbors.appendChild(pill);
+      });
+
+      panel.classList.add('open');
+    }
+
+    function closeSidePanel() {
+      panel.classList.remove('open');
+    }
+
+    function filterByGroup(group) {
+      activeGroupFilter = group;
+      document.querySelectorAll('.group-tag').forEach(tag => tag.classList.remove('selected'));
+      if (group === null) {
+        allPill.classList.add('selected');
+      } else {
+        const activePill = document.getElementById(`pill-${group}`);
+        if (activePill) activePill.classList.add('selected');
+      }
+
+      Graph.nodeRelSize(4);
+
+      if (group) {
+        const groupNodes = rawData.nodes.filter(n => n.group === group);
+        if (groupNodes.length > 0) {
+          let cx = 0, cy = 0, cz = 0;
+          groupNodes.forEach(n => {
+            cx += (n.x || 0);
+            cy += (n.y || 0);
+            cz += (n.z || 0);
+          });
+          cx /= groupNodes.length;
+          cy /= groupNodes.length;
+          cz /= groupNodes.length;
+
+          Graph.cameraPosition(
+            { x: cx + 100, y: cy + 80, z: cz + 200 },
+            { x: cx, y: cy, z: cz },
+            1400
+          );
+        }
+      }
+    }
+
+    const searchInput = document.getElementById('search-input');
+    searchInput.addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase().trim();
+      if (!query) {
+        clearSelection();
+        return;
+      }
+
+      const match = rawData.nodes.find(n => 
+        n.label.toLowerCase().includes(query) || 
+        (n.excerpt && n.excerpt.toLowerCase().includes(query))
+      );
+
+      if (match) {
+        handleNodeClick(match);
+      }
+    });
+
+    document.getElementById('reset-view-btn').addEventListener('click', () => {
+      clearSelection();
+      Graph.cameraPosition({ x: 0, y: 50, z: cameraDistance }, { x: 0, y: 0, z: 0 }, 1500);
+      isDrifting = true;
+      updateDriftUI();
+    });
+
+    const driftBtn = document.getElementById('drift-btn');
+    const driftBtnText = document.getElementById('drift-btn-text');
+
+    driftBtn.addEventListener('click', () => {
+      isDrifting = !isDrifting;
+      updateDriftUI();
+    });
+
+    function updateDriftUI() {
+      if (isDrifting) {
+        driftBtn.classList.add('active');
+        driftBtnText.textContent = "Drift ON";
+      } else {
+        driftBtn.classList.remove('active');
+        driftBtnText.textContent = "Drift PAUSED";
+      }
+    }
+
+    elem.addEventListener('pointerdown', () => {
+      lastUserActionTime = Date.now();
+    });
+
+    setInterval(() => {
+      if (isDrifting && !selectedNode) {
+        cameraAngle += driftSpeed;
+        Graph.cameraPosition({
+          x: cameraDistance * Math.sin(cameraAngle),
+          z: cameraDistance * Math.cos(cameraAngle)
+        });
+      }
+      
+      if (starField) {
+        starField.rotation.y += 0.0003;
+        starField.rotation.x += 0.0001;
+      }
+    }, 1000 / 60);
+
+    setTimeout(() => {
+      Graph.cameraPosition({ x: 0, y: 80, z: cameraDistance }, { x: 0, y: 0, z: 0 }, 2000);
+    }, 500);
+
+    // ==============================================================
+    // WEB SPEECH SYNTHESIS & RECOGNITION (VOICE IN BOTH DIRECTIONS)
+    // ==============================================================
+    let currentSessionId = sessionStorage.getItem('galaxy_session_id');
+    if (!currentSessionId) {
+      currentSessionId = 'session_' + Math.random().toString(36).substring(2, 12);
+      sessionStorage.setItem('galaxy_session_id', currentSessionId);
+    }
+
+    // Audio Autoplay Unlocking on first user gesture
+    let audioUnlocked = false;
+    function unlockAudio() {
+      if (audioUnlocked) return;
+      try {
+        if (typeof window.speechSynthesis !== 'undefined') {
+          window.speechSynthesis.resume();
+          // Prime with an empty utterance
+          const primer = new SpeechSynthesisUtterance(' ');
+          primer.volume = 0.001;
+          window.speechSynthesis.speak(primer);
+        }
+        audioUnlocked = true;
+      } catch (err) {
+        console.warn("Speech synthesis unlock note:", err);
+      }
+    }
+    window.addEventListener('click', unlockAudio, { passive: true });
+    window.addEventListener('keydown', unlockAudio, { passive: true });
+    window.addEventListener('touchstart', unlockAudio, { passive: true });
+
+    // Voice Selection (British English preferred)
+    let availableVoices = [];
+    function refreshVoices() {
+      if (typeof window.speechSynthesis === 'undefined') return;
+      availableVoices = window.speechSynthesis.getVoices();
+    }
+    refreshVoices();
+    if (typeof window.speechSynthesis !== 'undefined') {
+      window.speechSynthesis.onvoiceschanged = refreshVoices;
+    }
+
+    function getBritishVoice() {
+      if (!availableVoices || availableVoices.length === 0) {
+        refreshVoices();
+      }
+      // 1. Prefer British English: en-GB, UK, British, Daniel, Arthur, etc.
+      const gb = availableVoices.find(v => 
+        v.lang === 'en-GB' || 
+        v.lang === 'en_GB' || 
+        v.name.toLowerCase().includes('british') ||
+        v.name.toLowerCase().includes('united kingdom') ||
+        v.name.toLowerCase().includes('uk english')
+      );
+      if (gb) return gb;
+
+      // 2. Fallback to any English voice
+      const en = availableVoices.find(v => v.lang.startsWith('en'));
+      if (en) return en;
+
+      return availableVoices[0] || null;
+    }
+
+    let currentUtterance = null;
+    let isSpeaking = false;
+
+    function speakText(text) {
+      if (typeof window.speechSynthesis === 'undefined') return;
+      unlockAudio();
+      window.speechSynthesis.cancel(); // Stop prior speech
+
+      // Clean markdown formatting / error prefixes for clean speech
+      let speakable = text
+        .replace(/https?:\/\/\S+/g, '')
+        .replace(/[*_#`~\[\]]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!speakable) return;
+
+      const utterance = new SpeechSynthesisUtterance(speakable);
+      const voice = getBritishVoice();
+      if (voice) {
+        utterance.voice = voice;
+      }
+      utterance.pitch = 1.0;
+      utterance.rate = 1.0;
+
+      utterance.onstart = () => {
+        isSpeaking = true;
+        updateStatus('speaking');
+        updateSpeechBtn(true);
+      };
+
+      utterance.onend = () => {
+        isSpeaking = false;
+        updateStatus('idle');
+        updateSpeechBtn(false);
+      };
+
+      utterance.onerror = (e) => {
+        console.warn("Speech synthesis notice:", e);
+        isSpeaking = false;
+        updateStatus('idle');
+        updateSpeechBtn(false);
+      };
+
+      currentUtterance = utterance;
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function stopSpeaking() {
+      if (typeof window.speechSynthesis !== 'undefined') {
+        window.speechSynthesis.cancel();
+      }
+      isSpeaking = false;
+      updateStatus('idle');
+      updateSpeechBtn(false);
+    }
+
+    // Status Line Controller
+    const aiStatusLine = document.getElementById('ai-status-line');
+    const aiStatusText = document.getElementById('ai-status-text');
+
+    function updateStatus(state) {
+      aiStatusLine.className = 'ai-status-line';
+      if (state === 'listening') {
+        aiStatusLine.classList.add('visible', 'listening');
+        aiStatusText.textContent = "● listening…";
+      } else if (state === 'thinking') {
+        aiStatusLine.classList.add('visible', 'thinking');
+        aiStatusText.textContent = "● thinking…";
+      } else if (state === 'speaking') {
+        aiStatusLine.classList.add('visible', 'speaking');
+        aiStatusText.textContent = "● speaking…";
+      } else {
+        // Idle
+        aiStatusLine.classList.remove('visible', 'listening', 'thinking', 'speaking');
+        aiStatusText.textContent = "● ready";
+      }
+    }
+
+    // Speech Recognition (Mic Input via webkitSpeechRecognition)
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let isListening = false;
+
+    const micBtn = document.getElementById('ai-mic-btn');
+    const aiForm = document.getElementById('ai-form');
+    const aiInput = document.getElementById('ai-input');
+    const aiSubmitBtn = document.getElementById('ai-submit-btn');
+    const aiAnswerCard = document.getElementById('ai-answer-card');
+    const aiQueryEcho = document.getElementById('ai-query-echo');
+    const aiAnswerText = document.getElementById('ai-answer-text');
+    const aiSourcesSection = document.getElementById('ai-sources-section');
+    const aiSourcesPills = document.getElementById('ai-sources-pills');
+    const aiCardClose = document.getElementById('ai-card-close');
+    const aiSpeechToggle = document.getElementById('ai-speech-toggle');
+    const aiSpeechIcon = document.getElementById('ai-speech-icon');
+    const aiSpeechStatus = document.getElementById('ai-speech-status');
+
+    let latestAnswerText = "";
+
+    function updateSpeechBtn(speaking) {
+      if (speaking) {
+        aiSpeechIcon.textContent = "⏹";
+        aiSpeechStatus.textContent = "Stop";
+        aiSpeechToggle.style.color = "#fb7185";
+        aiSpeechToggle.style.borderColor = "rgba(244, 63, 94, 0.4)";
+        aiSpeechToggle.style.background = "rgba(244, 63, 94, 0.15)";
+      } else {
+        aiSpeechIcon.textContent = "🔊";
+        aiSpeechStatus.textContent = "Replay";
+        aiSpeechToggle.style.color = "#34d399";
+        aiSpeechToggle.style.borderColor = "rgba(52, 211, 153, 0.3)";
+        aiSpeechToggle.style.background = "rgba(52, 211, 153, 0.12)";
+      }
+    }
+
+    aiSpeechToggle.addEventListener('click', () => {
+      unlockAudio();
+      if (isSpeaking) {
+        stopSpeaking();
+      } else if (latestAnswerText) {
+        speakText(latestAnswerText);
+      }
+    });
+
+    if (SpeechRec) {
+      recognition = new SpeechRec();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        isListening = true;
+        micBtn.classList.add('recording');
+        updateStatus('listening');
+        stopSpeaking(); // stop any audio when user begins speaking
+      };
+
+      recognition.onresult = (event) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const item = event.results[i];
+          if (item.isFinal) {
+            finalTranscript += item[0].transcript;
+          } else {
+            interimTranscript += item[0].transcript;
+          }
+        }
+
+        aiInput.value = finalTranscript || interimTranscript;
+
+        if (finalTranscript.trim().length > 0) {
+          recognition.stop();
+          handlePromptInput(finalTranscript.trim());
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.warn("Speech recognition notice:", event.error);
+        isListening = false;
+        micBtn.classList.remove('recording');
+        updateStatus('idle');
+      };
+
+      recognition.onend = () => {
+        isListening = false;
+        micBtn.classList.remove('recording');
+        if (aiStatusText.textContent === "● listening…") {
+          updateStatus('idle');
+        }
+      };
+    } else {
+      micBtn.title = "Speech recognition is supported in Google Chrome / Edge";
+    }
+
+    micBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      unlockAudio();
+
+      if (!recognition) {
+        alert("Speech recognition is supported in Chrome. Please use text input or open in Google Chrome.");
+        return;
+      }
+
+      if (isListening) {
+        recognition.stop();
+      } else {
+        stopSpeaking();
+        try {
+          recognition.start();
+        } catch (err) {
+          console.warn("Mic start error:", err);
+        }
+      }
+    });
+
+    aiCardClose.addEventListener('click', dismissAiCard);
+
+    function dismissAiCard() {
+      aiAnswerCard.classList.remove('visible');
+      aiAnswerNodes.clear();
+      stopSpeaking();
+      updateStatus('idle');
+      Graph.nodeRelSize(4);
+    }
+
+    function isRememberPrompt(text) {
+      const clean = text.toLowerCase().trim();
+      return clean.startsWith('remember that') || 
+             /^(?:jarvis[, ]+)?(?:please\s+)?remember\s+that/i.test(clean);
+    }
+
+    function handlePromptInput(text) {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      if (isRememberPrompt(trimmed)) {
+        rememberNote(trimmed);
+      } else {
+        askGalaxy(trimmed);
+      }
+    }
+
+    aiForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      unlockAudio();
+      handlePromptInput(aiInput.value);
+    });
+
+    async function rememberNote(text) {
+      unlockAudio();
+      stopSpeaking();
+      isDrifting = false;
+      updateDriftUI();
+
+      updateStatus('thinking');
+      aiStatusText.textContent = "● committing to memory…";
+
+      aiAnswerCard.classList.add('visible');
+      aiQueryEcho.textContent = `Memory: "${text}"`;
+      aiAnswerText.textContent = "Transcribing note into archives and calculating constellation nexus...";
+      aiSourcesSection.style.display = 'none';
+      aiSourcesPills.innerHTML = '';
+      aiSubmitBtn.disabled = true;
+
+      const endpoint = window.location.port === '4700' ? '/remember' : '/api/remember';
+
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!data.success) {
+          throw new Error(data.error || "Failed to record memory");
+        }
+
+        const newNode = data.node;
+        const relatedId = data.relatedNodeId;
+        const relatedNode = rawData.nodes.find(n => n.id === relatedId);
+
+        // Position new node born at its most related node's position with slight offset
+        if (relatedNode) {
+          newNode.x = (relatedNode.x || 0) + (Math.random() - 0.5) * 16;
+          newNode.y = (relatedNode.y || 0) + (Math.random() - 0.5) * 16;
+          newNode.z = (relatedNode.z || 0) + (Math.random() - 0.5) * 16;
+        } else {
+          newNode.x = 0; newNode.y = 0; newNode.z = 0;
+        }
+
+        // Add node to graph LIVE
+        rawData.nodes.push(newNode);
+
+        // Add links to graph LIVE
+        neighborsById.set(newNode.id, new Set());
+        if (Array.isArray(data.links)) {
+          data.links.forEach(l => {
+            rawData.links.push(l);
+            neighborsById.get(newNode.id).add(l.target);
+            if (neighborsById.has(l.target)) {
+              neighborsById.get(l.target).add(newNode.id);
+            }
+          });
+        }
+
+        // Ensure "captures" group appears in filter bar and legend
+        ensureGroupRegistered("captures");
+
+        // Update HUD stats
+        document.getElementById('galaxy-stats').textContent = 
+          `${rawData.nodes.length} Nodes • ${rawData.links.length} Links`;
+
+        // Update 3D Force Graph LIVE
+        Graph.graphData({ nodes: rawData.nodes, links: rawData.links });
+
+        // Radiant birth glow pulse
+        bornPulseNodeId = newNode.id;
+        highlightNodes.clear();
+        highlightLinks.clear();
+        highlightNodes.add(newNode.id);
+        if (relatedNode) {
+          highlightNodes.add(relatedNode.id);
+          highlightLinks.add(`${newNode.id}-${relatedNode.id}`);
+          highlightLinks.add(`${relatedNode.id}-${newNode.id}`);
+        }
+
+        // Fly camera smoothly to the new node
+        Graph.cameraPosition(
+          { 
+            x: (newNode.x || 0) + 38, 
+            y: (newNode.y || 0) + 24, 
+            z: (newNode.z || 0) + 85 
+          }, 
+          newNode, 
+          1700
+        );
+
+        // Open side panel so the note text is displayed immediately
+        openSidePanel(newNode, neighborsById.get(newNode.id) || new Set());
+
+        // Update Answer Card
+        latestAnswerText = data.confirmation;
+        aiAnswerText.textContent = latestAnswerText;
+
+        // Source pill linking back to the related node
+        aiSourcesPills.innerHTML = '';
+        aiSourcesSection.style.display = 'flex';
+        if (relatedNode) {
+          const pill = document.createElement('div');
+          pill.className = 'ai-source-pill';
+          const color = getGroupColor(relatedNode.group);
+          pill.innerHTML = `
+            <span class="ai-source-dot" style="background: ${color}; box-shadow: 0 0 6px ${color}"></span>
+            <span>Linked to: #${relatedNode.id} ${relatedNode.label}</span>
+          `;
+          pill.onclick = () => handleNodeClick(relatedNode);
+          aiSourcesPills.appendChild(pill);
+        }
+
+        // Confirm out loud with one witty line!
+        speakText(latestAnswerText);
+
+        // Reset glow pulse after 4.5 seconds
+        setTimeout(() => {
+          bornPulseNodeId = null;
+          Graph.nodeRelSize(4);
+        }, 4500);
+
+      } catch (err) {
+        console.error("Remember request failed:", err);
+        const errMsg = `Could not record memory: ${err.message}`;
+        aiAnswerText.textContent = errMsg;
+        latestAnswerText = errMsg;
+        updateStatus('idle');
+      } finally {
+        aiSubmitBtn.disabled = false;
+      }
+    }
+
+    async function askGalaxy(question) {
+      unlockAudio();
+      stopSpeaking();
+      isDrifting = false;
+      updateDriftUI();
+
+      updateStatus('thinking');
+
+      // Show answer card in loading state
+      aiAnswerCard.classList.add('visible');
+      aiQueryEcho.textContent = `Q: "${question}"`;
+      aiAnswerText.textContent = 'Consulting knowledge galaxy & cross-referencing notes...';
+      aiSourcesSection.style.display = 'none';
+      aiSourcesPills.innerHTML = '';
+      aiSubmitBtn.disabled = true;
+
+      const endpoint = window.location.port === '4700' ? '/chat' : '/api/chat';
+
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Session-Id': currentSessionId
+          },
+          body: JSON.stringify({
+            question: question,
+            sessionId: currentSessionId
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Server returned status ${response.status}`);
+        }
+
+        const data = await response.json();
+        renderAiAnswer(data);
+      } catch (err) {
+        console.error("Chat request failed:", err);
+        const errMsg = `Could not reach galaxy server: ${err.message}. Ensure server.py is running on port 4700.`;
+        aiAnswerText.textContent = errMsg;
+        latestAnswerText = errMsg;
+        updateStatus('idle');
+      } finally {
+        aiSubmitBtn.disabled = false;
+      }
+    }
+
+    function renderAiAnswer(data) {
+      latestAnswerText = data.answer || "No response received.";
+      aiAnswerText.textContent = latestAnswerText;
+
+      const nodeIndexes = Array.isArray(data.nodes) ? data.nodes : [];
+      aiAnswerNodes.clear();
+      highlightNodes.clear();
+      highlightLinks.clear();
+
+      // Populate source pills
+      aiSourcesPills.innerHTML = '';
+      if (nodeIndexes.length > 0) {
+        aiSourcesSection.style.display = 'flex';
+        nodeIndexes.forEach(idx => {
+          const node = rawData.nodes[idx];
+          if (!node) return;
+          const pill = document.createElement('div');
+          pill.className = 'ai-source-pill';
+          const color = getGroupColor(node.group);
+          pill.innerHTML = `
+            <span class="ai-source-dot" style="background: ${color}; box-shadow: 0 0 6px ${color}"></span>
+            <span>#${node.id} ${node.label}</span>
+          `;
+          pill.onclick = () => {
+            handleNodeClick(node);
+          };
+          aiSourcesPills.appendChild(pill);
+        });
+      } else {
+        aiSourcesSection.style.display = 'none';
+      }
+
+      if (nodeIndexes.length >= 4) {
+        // ---------------------------------------------------------------------
+        // 4+ NOTES: LIGHT UP THE WHOLE CLUSTER (INSTEAD OF FLYING TO ONE)
+        // ---------------------------------------------------------------------
+        closeSidePanel(); // Close single-node panel to give panoramic view of the luminous cluster
+
+        nodeIndexes.forEach(idx => {
+          aiAnswerNodes.add(idx);
+          highlightNodes.add(idx);
+        });
+
+        // Highlight interconnecting links within the cluster
+        rawData.links.forEach(link => {
+          const s = typeof link.source === 'object' ? link.source.id : link.source;
+          const t = typeof link.target === 'object' ? link.target.id : link.target;
+          if (aiAnswerNodes.has(s) && aiAnswerNodes.has(t)) {
+            highlightLinks.add(`${s}-${t}`);
+            highlightLinks.add(`${t}-${s}`);
+          }
+        });
+
+        // Compute centroid & bounding span of the 4+ cluster nodes
+        let avgX = 0, avgY = 0, avgZ = 0;
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+        let minZ = Infinity, maxZ = -Infinity;
+        let count = 0;
+
+        nodeIndexes.forEach(idx => {
+          const node = rawData.nodes[idx];
+          if (!node) return;
+          const nx = node.x || 0;
+          const ny = node.y || 0;
+          const nz = node.z || 0;
+          avgX += nx; avgY += ny; avgZ += nz;
+          minX = Math.min(minX, nx); maxX = Math.max(maxX, nx);
+          minY = Math.min(minY, ny); maxY = Math.max(maxY, ny);
+          minZ = Math.min(minZ, nz); maxZ = Math.max(maxZ, nz);
+          count++;
+        });
+
+        if (count > 0) {
+          avgX /= count; avgY /= count; avgZ /= count;
+          const span = Math.max(maxX - minX, maxY - minY, maxZ - minZ, 100);
+          const cameraDist = Math.max(220, span * 1.55);
+
+          // Fly smoothly to frame the entire constellation
+          Graph.cameraPosition(
+            { x: avgX + 60, y: avgY + 70, z: avgZ + cameraDist },
+            { x: avgX, y: avgY, z: avgZ },
+            1800
+          );
+        }
+
+      } else if (nodeIndexes.length >= 1) {
+        // ---------------------------------------------------------------------
+        // 1-3 NOTES: FLY TO TOP SOURCE NODE, LIGHT IT UP + DIRECT NEIGHBORS,
+        // AND OPEN ITS SIDE PANEL TO PROVE THE NOTE ON SCREEN
+        // ---------------------------------------------------------------------
+        const topNodeId = nodeIndexes[0];
+        const topNode = rawData.nodes[topNodeId];
+
+        if (topNode) {
+          selectedNode = topNode;
+          isDrifting = false;
+          updateDriftUI();
+
+          // Light up top source node in luminous aiAnswer glow
+          aiAnswerNodes.add(topNode.id);
+          highlightNodes.add(topNode.id);
+
+          // Light up top source's direct 1-hop neighbors and links
+          const neighbors = neighborsById.get(topNode.id) || new Set();
+          neighbors.forEach(nbrId => {
+            highlightNodes.add(nbrId);
+            highlightLinks.add(`${topNode.id}-${nbrId}`);
+            highlightLinks.add(`${nbrId}-${topNode.id}`);
+          });
+
+          // Fly camera directly to top source node with cinematic focus
+          const distance = 90;
+          Graph.cameraPosition(
+            { 
+              x: (topNode.x || 0) + 40, 
+              y: (topNode.y || 0) + 25, 
+              z: (topNode.z || 0) + distance 
+            }, 
+            topNode, 
+            1600
+          );
+
+          // Open side panel so the note text/excerpt is proved right on screen
+          openSidePanel(topNode, neighbors);
+        }
+      } else {
+        // ---------------------------------------------------------------------
+        // 0 NOTES: SMALL TALK, JOKES, GENERAL BANTER
+        // Do NOT drag the camera around the graph! Leave camera exactly where it is.
+        // ---------------------------------------------------------------------
+        closeSidePanel();
+      }
+
+      Graph.nodeRelSize(4);
+
+      // Spoken answer stays short: speak ONLY the witty 1-2 sentence butler reply
+      speakText(latestAnswerText);
+    }
+
+    // ==============================================================
+    // BOOT GREETING
+    // "Good evening, sir. [N] notes indexed, all present and accounted for"
+    // ==============================================================
+    const bootGreeting = `Good evening, sir. ${rawData.nodes.length} notes indexed, all present and accounted for.`;
+    
+    // Show boot greeting in status line
+    aiStatusLine.classList.add('visible');
+    aiStatusText.textContent = `● ${bootGreeting}`;
+
+    let bootGreetingSpoken = false;
+    function playBootGreeting() {
+      if (bootGreetingSpoken) return;
+      bootGreetingSpoken = true;
+      unlockAudio();
+      speakText(bootGreeting);
+      setTimeout(() => {
+        if (!isListening && !isSpeaking) {
+          updateStatus('idle');
+        }
+      }, 5500);
+    }
+
+    // Attempt immediately after initial load or on first user gesture
+    setTimeout(() => {
+      playBootGreeting();
+    }, 800);
+
+    // ==============================================================
+    // HELP & TROUBLESHOOTING MODAL HANDLERS
+    // ==============================================================
+    const helpModal = document.getElementById('help-modal');
+    const helpBtn = document.getElementById('help-btn');
+    const helpClose = document.getElementById('help-close');
+    if (helpBtn && helpModal) {
+      helpBtn.addEventListener('click', () => {
+        helpModal.classList.add('open');
+      });
+    }
+    if (helpClose && helpModal) {
+      helpClose.addEventListener('click', () => {
+        helpModal.classList.remove('open');
+      });
+    }
+    if (helpModal) {
+      helpModal.addEventListener('click', (e) => {
+        if (e.target === helpModal) helpModal.classList.remove('open');
+      });
+    }
+
+    // ==============================================================
+    // JARVIS AUTONOMOUS BOOKING PHONE AGENT SIMULATOR
+    // ==============================================================
+    const phoneModal = document.getElementById('phone-modal');
+    const phoneBtn = document.getElementById('phone-btn');
+    const phoneClose = document.getElementById('phone-close');
+    const phoneStartBtn = document.getElementById('phone-start-btn');
+    const phoneHangupBtn = document.getElementById('phone-hangup-btn');
+    const phoneSaveMemoryBtn = document.getElementById('phone-save-memory-btn');
+    const phoneTranscript = document.getElementById('phone-transcript');
+    const phoneStatusLabel = document.getElementById('phone-status-label');
+    const phonePulseDot = document.getElementById('phone-pulse-dot');
+    const phoneTimer = document.getElementById('phone-timer');
+
+    const phoneParamName = document.getElementById('phone-param-name');
+    const phoneParamService = document.getElementById('phone-param-service');
+    const phoneParamTime = document.getElementById('phone-param-time');
+    const phoneParamPhone = document.getElementById('phone-param-phone');
+    const phoneParamNotes = document.getElementById('phone-param-notes');
+
+    const phoneInteractiveBar = document.getElementById('phone-interactive-bar');
+    const phoneHostInput = document.getElementById('phone-host-input');
+    const phoneHostMic = document.getElementById('phone-host-mic');
+    const phoneHostSend = document.getElementById('phone-host-send');
+
+    let selectedScenario = 'available';
+    let callActive = false;
+    let callTimerInterval = null;
+    let callSeconds = 0;
+    let callStep = 0;
+    let bossNameMentionCount = 0;
+    let timeMentioned = false;
+    let agreedDetailsRead = false;
+    let currentCallRecord = null;
+
+    // Scenario selection buttons
+    document.querySelectorAll('.phone-scenario-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.phone-scenario-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedScenario = btn.dataset.scenario;
+        if (selectedScenario === 'interactive') {
+          phoneInteractiveBar.style.display = 'flex';
+        } else {
+          phoneInteractiveBar.style.display = 'none';
+        }
+      });
+    });
+
+    window.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'OPEN_PHONE_MODAL' && phoneModal) {
+        phoneModal.classList.add('open');
+        unlockAudio();
+      }
+    });
+
+    if (phoneBtn && phoneModal) {
+      phoneBtn.addEventListener('click', () => {
+        phoneModal.classList.add('open');
+        unlockAudio();
+      });
+    }
+    if (phoneClose && phoneModal) {
+      phoneClose.addEventListener('click', () => {
+        if (callActive) hangupCall("Call window closed by user.");
+        phoneModal.classList.remove('open');
+      });
+    }
+
+    function addTranscript(sender, text, toolCall = null) {
+      const bubble = document.createElement('div');
+      bubble.className = `phone-bubble ${sender}`;
+      const prefix = sender === 'jarvis' ? '<strong>Jarvis:</strong> ' : (sender === 'receptionist' ? '<strong>Host / Front Desk:</strong> ' : '');
+      bubble.innerHTML = `${prefix}${text}`;
+      if (toolCall) {
+        const tag = document.createElement('div');
+        tag.className = 'phone-tool-tag';
+        tag.textContent = `[tool: ${toolCall}]`;
+        bubble.appendChild(tag);
+      }
+      phoneTranscript.appendChild(bubble);
+      phoneTranscript.scrollTop = phoneTranscript.scrollHeight;
+
+      if (sender === 'jarvis') {
+        speakText(text);
+      }
+    }
+
+    function startTimer() {
+      callSeconds = 0;
+      phoneTimer.textContent = "00:00";
+      clearInterval(callTimerInterval);
+      callTimerInterval = setInterval(() => {
+        callSeconds++;
+        const mins = String(Math.floor(callSeconds / 60)).padStart(2, '0');
+        const secs = String(callSeconds % 60).padStart(2, '0');
+        phoneTimer.textContent = `${mins}:${secs}`;
+      }, 1000);
+    }
+
+    function stopTimer() {
+      clearInterval(callTimerInterval);
+    }
+
+    function setCallStatus(status, labelColor = '#94a3b8') {
+      phoneStatusLabel.textContent = `Call Status: ${status}`;
+      phoneStatusLabel.style.color = labelColor;
+      phonePulseDot.className = 'phone-pulse-dot';
+      if (status.includes('Calling') || status.includes('Dialing')) {
+        phonePulseDot.classList.add('calling');
+      } else if (status.includes('Connected') || status.includes('Live')) {
+        phonePulseDot.classList.add('active');
+      }
+    }
+
+    function toolEndCall(reason = "Booking concluded") {
+      stopSpeaking();
+      callActive = false;
+      stopTimer();
+      setCallStatus("Call Ended", "#94a3b8");
+      phoneStartBtn.style.display = 'inline-flex';
+      phoneHangupBtn.style.display = 'none';
+      addTranscript('system', `[Call disconnected: ${reason}]`, "end_call()");
+      if (currentCallRecord && currentCallRecord.confirmed) {
+        phoneSaveMemoryBtn.style.display = 'inline-flex';
+      }
+    }
+
+    function toolPressDigit(digit) {
+      addTranscript('system', `Jarvis pressed DTMF key ${digit}`, `press_digit("${digit}")`);
+    }
+
+    function hangupCall(reason = "User ended call") {
+      toolEndCall(reason);
+    }
+
+    phoneHangupBtn.addEventListener('click', () => {
+      hangupCall();
+    });
+
+    // Start Call Orchestrator
+    phoneStartBtn.addEventListener('click', () => {
+      unlockAudio();
+      const bossName = phoneParamName.value.trim() || "my boss";
+      const service = phoneParamService.value.trim() || "booking";
+      const timeStr = phoneParamTime.value.trim() || "tonight at 7";
+      const phoneNum = phoneParamPhone.value.trim() || "555-0199";
+      const notes = phoneParamNotes.value.trim();
+
+      callActive = true;
+      callStep = 0;
+      bossNameMentionCount = 0;
+      timeMentioned = false;
+      agreedDetailsRead = false;
+      phoneSaveMemoryBtn.style.display = 'none';
+      phoneStartBtn.style.display = 'none';
+      phoneHangupBtn.style.display = 'inline-flex';
+      phoneTranscript.innerHTML = '';
+      currentCallRecord = {
+        name: bossName,
+        service: service,
+        time: timeStr,
+        phone: phoneNum,
+        notes: notes,
+        confirmed: false
+      };
+
+      setCallStatus("Dialing...", "#f59e0b");
+      addTranscript('system', `Dialing destination for ${service}...`);
+      startTimer();
+
+      if (selectedScenario === 'menu') {
+        runScenarioMenu(bossName, service, timeStr, phoneNum, notes);
+      } else if (selectedScenario === 'alternative') {
+        runScenarioAlternative(bossName, service, timeStr, phoneNum, notes);
+      } else if (selectedScenario === 'nothing') {
+        runScenarioNothing(bossName, service, timeStr, phoneNum, notes);
+      } else if (selectedScenario === 'interactive') {
+        runScenarioInteractive(bossName, service, timeStr, phoneNum, notes);
+      } else {
+        runScenarioAvailable(bossName, service, timeStr, phoneNum, notes);
+      }
+    });
+
+    // Scenario 1: Time Available (Smooth Booking)
+    function runScenarioAvailable(bossName, service, timeStr, phoneNum, notes) {
+      setTimeout(() => {
+        setCallStatus("Connected (Audio Live)", "#10b981");
+        addTranscript('receptionist', "Good afternoon, Osteria Stella, this is Marco speaking, how can I help you?");
+        
+        // Step 1: Greeting
+        setTimeout(() => {
+          bossNameMentionCount++;
+          addTranscript('jarvis', `Hi, this is Jarvis, ${bossName}'s assistant. I'd like to make a booking, do you have a quick moment?`);
+          
+          setTimeout(() => {
+            addTranscript('receptionist', "Yes, I certainly do! What can I get set up for you?");
+            
+            // Step 2: State request in one sentence + notes if not none
+            setTimeout(() => {
+              bossNameMentionCount++;
+              let reqText = `I'd like to book a ${service} on ${timeStr}, under the name ${bossName}.`;
+              if (notes && notes.toLowerCase() !== 'none') {
+                reqText += ` He prefers a ${notes}.`;
+              }
+              timeMentioned = true;
+              addTranscript('jarvis', reqText);
+
+              setTimeout(() => {
+                addTranscript('receptionist', "Let me check... yes, we have that time open for you tonight!");
+
+                // Step 3: Read details back ONCE ("So that's ... is that right?")
+                setTimeout(() => {
+                  agreedDetailsRead = true;
+                  addTranscript('jarvis', `So that's a ${service} for that time under the name ${bossName}, is that right?`);
+
+                  setTimeout(() => {
+                    addTranscript('receptionist', "Yes, that's completely locked in!");
+
+                    // Final Question: Confirmation number or anything to bring
+                    setTimeout(() => {
+                      addTranscript('jarvis', "Is there a confirmation number, or anything he should know or bring?");
+
+                      setTimeout(() => {
+                        addTranscript('receptionist', "Confirmation number is Stella-882. Just give his name at the front desk when you arrive.");
+
+                        // Thank warmly, say goodbye, end_call
+                        setTimeout(() => {
+                          currentCallRecord.confirmed = true;
+                          currentCallRecord.confNumber = "Stella-882";
+                          addTranscript('jarvis', "Wonderful, thank you so much for your help. Have a lovely evening, goodbye.");
+
+                          setTimeout(() => {
+                            toolEndCall("Booking successfully confirmed");
+                          }, 1800);
+                        }, 1600);
+                      }, 1800);
+                    }, 1500);
+                  }, 1600);
+                }, 1500);
+              }, 1800);
+            }, 1600);
+          }, 1800);
+        }, 1500);
+      }, 1200);
+    }
+
+    // Scenario 2: Alternative Offered (e.g. 8pm)
+    function runScenarioAlternative(bossName, service, timeStr, phoneNum, notes) {
+      setTimeout(() => {
+        setCallStatus("Connected (Audio Live)", "#10b981");
+        addTranscript('receptionist', "Trattoria Bella, how can I help you?");
+
+        setTimeout(() => {
+          bossNameMentionCount++;
+          addTranscript('jarvis', `Hi, this is Jarvis, ${bossName}'s assistant. I'd like to make a booking, do you have a quick moment?`);
+
+          setTimeout(() => {
+            addTranscript('receptionist', "Sure, go ahead.");
+
+            setTimeout(() => {
+              bossNameMentionCount++;
+              let reqText = `I'd like to book a ${service} on ${timeStr}, under the name ${bossName}.`;
+              if (notes && notes.toLowerCase() !== 'none') reqText += ` ${notes}.`;
+              addTranscript('jarvis', reqText);
+
+              // Receptionist ALREADY offers alternative
+              setTimeout(() => {
+                addTranscript('receptionist', "Ah, we don't have that time open, but eight tonight works.");
+
+                // Jarvis rule: Acknowledge in couple words ("Eight tonight — got it."), then close, never hold!
+                setTimeout(() => {
+                  addTranscript('jarvis', "Eight tonight — got it. Let me check with my boss and I'll call you right back, thank you, I appreciate it.");
+
+                  setTimeout(() => {
+                    addTranscript('receptionist', "Sounds good, talk to you soon!");
+                    toolEndCall("Alternative noted: 8 tonight. Calling boss to confirm.");
+                  }, 1200);
+                }, 1600);
+              }, 1800);
+            }, 1500);
+          }, 1600);
+        }, 1500);
+      }, 1200);
+    }
+
+    // Scenario 3: Time Unavailable (Offers Nothing)
+    function runScenarioNothing(bossName, service, timeStr, phoneNum, notes) {
+      setTimeout(() => {
+        setCallStatus("Connected (Audio Live)", "#10b981");
+        addTranscript('receptionist', "City Dental Clinic, front desk.");
+
+        setTimeout(() => {
+          bossNameMentionCount++;
+          addTranscript('jarvis', `Hi, this is Jarvis, ${bossName}'s assistant. I'd like to make a booking, do you have a quick moment?`);
+
+          setTimeout(() => {
+            addTranscript('receptionist', "Yes, I have a moment.");
+
+            setTimeout(() => {
+              bossNameMentionCount++;
+              let reqText = `I'd like to schedule a ${service} on ${timeStr}, under the name ${bossName}.`;
+              addTranscript('jarvis', reqText);
+
+              // Host offers nothing
+              setTimeout(() => {
+                addTranscript('receptionist', "I'm sorry, our doctor is completely booked at that time.");
+
+                // Jarvis rule: Ask "What do you have closest to {{datetime}}?" once
+                setTimeout(() => {
+                  addTranscript('jarvis', `What do you have closest to ${timeStr}?`);
+
+                  setTimeout(() => {
+                    addTranscript('receptionist', "We have an opening tomorrow afternoon at three fifteen.");
+
+                    // Acknowledge + close
+                    setTimeout(() => {
+                      addTranscript('jarvis', "Tomorrow at three fifteen — got it. Let me check with my boss and I'll call you right back, thank you, I appreciate it.");
+
+                      setTimeout(() => {
+                        toolEndCall("Closest availability noted. Calling boss to confirm.");
+                      }, 1400);
+                    }, 1600);
+                  }, 1800);
+                }, 1500);
+              }, 1800);
+            }, 1500);
+          }, 1600);
+        }, 1500);
+      }, 1200);
+    }
+
+    // Scenario 4: Automated Phone Menu & Deposit Handling
+    function runScenarioMenu(bossName, service, timeStr, phoneNum, notes) {
+      setTimeout(() => {
+        setCallStatus("Automated IVR Menu", "#f59e0b");
+        addTranscript('receptionist', "Thank you for calling Grand Salon & Spa. For hours press 1. For appointments and reservations, press 2. For billing, press 3.");
+
+        setTimeout(() => {
+          toolPressDigit("2");
+
+          setTimeout(() => {
+            setCallStatus("Connected to Representative", "#10b981");
+            addTranscript('receptionist', "Grand Salon reservations, Sarah speaking, how can I help?");
+
+            setTimeout(() => {
+              bossNameMentionCount++;
+              addTranscript('jarvis', `Hi, this is Jarvis, ${bossName}'s assistant. I'd like to make a booking, do you have a quick moment?`);
+
+              setTimeout(() => {
+                addTranscript('receptionist', "Yes, what service would you like?");
+
+                setTimeout(() => {
+                  bossNameMentionCount++;
+                  addTranscript('jarvis', `I'd like to book a ${service} on ${timeStr}, under the name ${bossName}.`);
+
+                  setTimeout(() => {
+                    addTranscript('receptionist', "We have that slot available, but we require a twenty-five dollar credit card deposit to hold the chair.");
+
+                    // Hard rule: NEVER give card details.
+                    setTimeout(() => {
+                      addTranscript('jarvis', "My boss will handle payment directly, could you note the booking in the meantime?");
+
+                      setTimeout(() => {
+                        addTranscript('receptionist', "Certainly, I will hold the tentative slot and he can call us with the card by five PM.");
+
+                        setTimeout(() => {
+                          currentCallRecord.confirmed = true;
+                          addTranscript('jarvis', "Is there a confirmation number, or anything he should know or bring?");
+
+                          setTimeout(() => {
+                            addTranscript('receptionist', "Ref number is Salon-410. See you then!");
+
+                            setTimeout(() => {
+                              addTranscript('jarvis', "Thank you kindly, goodbye.");
+                              setTimeout(() => {
+                                toolEndCall("Booking held; deposit handled according to payment protocol.");
+                              }, 1500);
+                            }, 1400);
+                          }, 1600);
+                        }, 1500);
+                      }, 1800);
+                    }, 1600);
+                  }, 1800);
+                }, 1500);
+              }, 1600);
+            }, 1500);
+          }, 1500);
+        }, 1500);
+      }, 1200);
+    }
+
+    // Scenario 5: Interactive Custom Voice/Text
+    function runScenarioInteractive(bossName, service, timeStr, phoneNum, notes) {
+      setTimeout(() => {
+        setCallStatus("Connected (Awaiting Greeting)", "#10b981");
+        addTranscript('system', "Line connected. Type or click 🎙 below to speak as the receptionist. Jarvis will reply adhering to style guardrails.");
+      }, 1000);
+    }
+
+    function processInteractiveHostInput(hostText) {
+      if (!hostText.trim()) return;
+      addTranscript('receptionist', hostText);
+      phoneHostInput.value = '';
+
+      const bossName = phoneParamName.value.trim() || "my boss";
+      const service = phoneParamService.value.trim() || "booking";
+      const timeStr = phoneParamTime.value.trim() || "tonight at 7";
+      const phoneNum = phoneParamPhone.value.trim() || "555-0199";
+      const notes = phoneParamNotes.value.trim();
+
+      const lower = hostText.toLowerCase();
+
+      // Step 1: Initial greeting from receptionist
+      if (callStep === 0) {
+        callStep = 1;
+        bossNameMentionCount++;
+        setTimeout(() => {
+          addTranscript('jarvis', `Hi, this is Jarvis, ${bossName}'s assistant. I'd like to make a booking, do you have a quick moment?`);
+        }, 800);
+        return;
+      }
+
+      // If asked callback number
+      if (lower.includes('number') || lower.includes('phone') || lower.includes('call you back') || lower.includes('contact')) {
+        const digitSpoken = phoneNum.split('').map(d => d === '-' ? ' ' : d).join(' ');
+        setTimeout(() => {
+          addTranscript('jarvis', `His number is ${digitSpoken}.`);
+        }, 800);
+        return;
+      }
+
+      // If asked to spell the name
+      if (lower.includes('spell') || lower.includes('how do you spell')) {
+        const spelled = bossName.toUpperCase().split('').join('-');
+        setTimeout(() => {
+          addTranscript('jarvis', `That's spelled ${spelled}.`);
+        }, 800);
+        return;
+      }
+
+      // If asked if AI
+      if (lower.includes('are you an ai') || lower.includes('are you a robot') || lower.includes('are you human')) {
+        setTimeout(() => {
+          addTranscript('jarvis', "Yes, I am an AI assistant calling on behalf of my boss.");
+        }, 800);
+        return;
+      }
+
+      // Step 2: Stating request
+      if (callStep === 1) {
+        callStep = 2;
+        bossNameMentionCount++;
+        setTimeout(() => {
+          let req = `I'd like to book a ${service} on ${timeStr}, under the name ${bossName}.`;
+          if (notes && notes.toLowerCase() !== 'none') req += ` ${notes}.`;
+          addTranscript('jarvis', req);
+        }, 800);
+        return;
+      }
+
+      // If time unavailable with alternative
+      if (lower.includes("don't have") || lower.includes('not available') || lower.includes('full') || lower.includes('booked')) {
+        if (lower.includes('how about') || lower.includes('works') || lower.includes('we have')) {
+          setTimeout(() => {
+            addTranscript('jarvis', "Got it. Let me check with my boss and I'll call you right back, thank you, I appreciate it.");
+            setTimeout(() => toolEndCall("Alternative offered; checking with boss."), 1500);
+          }, 800);
+        } else {
+          setTimeout(() => {
+            addTranscript('jarvis', `What do you have closest to that time?`);
+          }, 800);
+        }
+        return;
+      }
+
+      // Step 3: If available and confirmed
+      if (lower.includes('yes') || lower.includes('booked') || lower.includes('available') || lower.includes('set') || lower.includes('locked')) {
+        if (!agreedDetailsRead) {
+          agreedDetailsRead = true;
+          setTimeout(() => {
+            addTranscript('jarvis', `So that's a ${service} for that time under the name ${bossName}, is that right?`);
+          }, 800);
+        } else {
+          setTimeout(() => {
+            currentCallRecord.confirmed = true;
+            addTranscript('jarvis', "Is there a confirmation number, or anything he should know or bring?");
+          }, 800);
+        }
+        return;
+      }
+
+      // Concluding goodbye
+      if (lower.includes('number is') || lower.includes('see you') || lower.includes('all set') || lower.includes('goodbye')) {
+        setTimeout(() => {
+          addTranscript('jarvis', "Thank you so much for your help. Have a wonderful day, goodbye.");
+          setTimeout(() => toolEndCall("Booking finalized."), 1500);
+        }, 800);
+        return;
+      }
+
+      // Default polite concise response
+      setTimeout(() => {
+        addTranscript('jarvis', "Whatever works best on your end.");
+      }, 800);
+    }
+
+    phoneHostSend.addEventListener('click', () => {
+      processInteractiveHostInput(phoneHostInput.value);
+    });
+    phoneHostInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        processInteractiveHostInput(phoneHostInput.value);
+      }
+    });
+
+    // Mic for interactive receptionist roleplay
+    if (SpeechRec) {
+      const hostRec = new SpeechRec();
+      hostRec.lang = 'en-US';
+      hostRec.continuous = false;
+      hostRec.onresult = (e) => {
+        const transcript = e.results[0][0].transcript;
+        phoneHostInput.value = transcript;
+        processInteractiveHostInput(transcript);
+      };
+      phoneHostMic.addEventListener('click', () => {
+        try { hostRec.start(); } catch (err) { console.warn(err); }
+      });
+    }
+
+    // Save Booking to Knowledge Galaxy (/remember endpoint)
+    phoneSaveMemoryBtn.addEventListener('click', async () => {
+      if (!currentCallRecord) return;
+      const memText = `remember that Jarvis completed a booking for ${currentCallRecord.name}: ${currentCallRecord.service} on ${currentCallRecord.time}. Reference: ${currentCallRecord.confNumber || 'Confirmed'}.`;
+      phoneSaveMemoryBtn.disabled = true;
+      phoneSaveMemoryBtn.textContent = "Saving to Galaxy...";
+      
+      try {
+        await rememberNote(memText);
+        phoneSaveMemoryBtn.textContent = "✓ Saved to Constellation!";
+        phoneSaveMemoryBtn.style.color = "#10b981";
+      } catch (err) {
+        phoneSaveMemoryBtn.textContent = "Error saving";
+      }
+    });
+  </script>
+</body>
+</html>
